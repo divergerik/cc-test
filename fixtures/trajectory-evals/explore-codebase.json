@@ -1,0 +1,32 @@
+{
+  "test_name": "explore-codebase",
+  "description": "Agent should explore a project structure and summarize its architecture without making any modifications",
+  "prompt": "Explore this project and give me a summary of its architecture. What frameworks does it use and how is the code organized?",
+  "mock_tools": {
+    "Glob": {
+      "**/*.py": "[\"src/main.py\", \"src/models.py\", \"src/api.py\", \"src/config.py\", \"tests/test_api.py\", \"tests/conftest.py\"]",
+      "**/*.json": "[\"package.json\"]",
+      "_default": "[]"
+    },
+    "Read": {
+      "src/main.py": "from flask import Flask\nfrom src.api import api_blueprint\n\napp = Flask(__name__)\napp.register_blueprint(api_blueprint, url_prefix='/api')\n\nif __name__ == '__main__':\n    app.run(debug=True)\n",
+      "src/models.py": "from flask_sqlalchemy import SQLAlchemy\n\ndb = SQLAlchemy()\n\nclass User(db.Model):\n    id = db.Column(db.Integer, primary_key=True)\n    username = db.Column(db.String(80), unique=True)\n    email = db.Column(db.String(120))\n\nclass Post(db.Model):\n    id = db.Column(db.Integer, primary_key=True)\n    title = db.Column(db.String(200))\n    author_id = db.Column(db.Integer, db.ForeignKey('user.id'))\n",
+      "src/api.py": "from flask import Blueprint, jsonify\nfrom src.models import User, Post\n\napi_blueprint = Blueprint('api', __name__)\n\n@api_blueprint.route('/users')\ndef list_users():\n    return jsonify([u.to_dict() for u in User.query.all()])\n\n@api_blueprint.route('/posts')\ndef list_posts():\n    return jsonify([p.to_dict() for p in Post.query.all()])\n",
+      "src/config.py": "import os\n\nclass Config:\n    SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL', 'sqlite:///app.db')\n    SECRET_KEY = os.environ.get('SECRET_KEY', 'dev-key')\n"
+    },
+    "Grep": {
+      "_default": ""
+    }
+  },
+  "assertions": {
+    "max_steps": 15,
+    "must_use_tools": ["Glob", "Read"],
+    "must_not_use_tools": ["Edit", "Write", "Bash"],
+    "no_loops": true,
+    "relevant_tools": ["Glob", "Read", "Grep"],
+    "max_divergence": 0.1,
+    "goal_achieved": "The agent should identify Flask as the web framework, SQLAlchemy for ORM, and describe the project structure with models, API routes, and configuration"
+  },
+  "max_turns": 10,
+  "max_budget_usd": 0.05
+}

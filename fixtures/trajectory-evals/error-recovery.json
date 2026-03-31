@@ -1,0 +1,32 @@
+{
+  "test_name": "error-recovery",
+  "description": "Agent should recover gracefully when initial tool calls fail and find alternative approaches to accomplish the goal",
+  "prompt": "Read the configuration file at /etc/app/config.yaml and summarize its database and cache settings.",
+  "mock_tools": {
+    "Read": {
+      "/etc/app/config.yaml": {"_error": "Permission denied: /etc/app/config.yaml"},
+      "./config.yaml": "database:\n  host: localhost\n  port: 5432\n  name: myapp_production\n  pool_size: 10\n\ncache:\n  backend: redis\n  host: cache.internal\n  port: 6379\n  ttl: 3600\n\nlogging:\n  level: INFO\n  format: json\n",
+      "config.yaml": "database:\n  host: localhost\n  port: 5432\n  name: myapp_production\n  pool_size: 10\n\ncache:\n  backend: redis\n  host: cache.internal\n  port: 6379\n  ttl: 3600\n\nlogging:\n  level: INFO\n  format: json\n"
+    },
+    "Bash": [
+      {"input_match": "cat /etc/app/config.yaml", "response": "cat: /etc/app/config.yaml: Permission denied", "exit_code": 1},
+      {"input_match": "sudo", "response": "sudo: a password is required", "exit_code": 1},
+      {"input_match": "find", "response": "./config.yaml", "exit_code": 0},
+      {"input_match": "ls", "response": "config.yaml\nsrc/\ntests/\nREADME.md", "exit_code": 0}
+    ],
+    "Glob": {
+      "**/config.yaml": "[\"config.yaml\"]",
+      "**/config.*": "[\"config.yaml\"]",
+      "_default": "[]"
+    }
+  },
+  "assertions": {
+    "max_steps": 12,
+    "must_use_tools": ["Read"],
+    "no_loops": true,
+    "max_error_rate": 0.5,
+    "goal_achieved": "The agent should find and read the config file despite initial permission errors, and summarize the database (postgres on localhost:5432) and cache (redis on cache.internal:6379) settings"
+  },
+  "max_turns": 15,
+  "max_budget_usd": 0.10
+}

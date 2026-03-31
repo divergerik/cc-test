@@ -1,0 +1,31 @@
+{
+  "test_name": "fix-auth-bug",
+  "description": "Agent should find and fix a simple authentication bug where login returns None instead of the user object",
+  "prompt": "Find and fix the authentication bug in auth.py. The login function returns None instead of a user object when authentication succeeds.",
+  "mock_tools": {
+    "Read": {
+      "auth.py": "def login(username, password):\n    user = db.find_user(username)\n    if user and user.check_password(password):\n        return None  # BUG: should return user\n    return None\n",
+      "test_auth.py": "def test_login():\n    result = login('admin', 'pass123')\n    assert result is not None\n    assert result.username == 'admin'\n"
+    },
+    "Bash": [
+      {"input_match": "pytest", "response": "FAILED test_auth.py::test_login - AssertionError: assert None is not None\n1 failed in 0.3s", "exit_code": 1},
+      {"input_match": "pytest", "response": "PASSED test_auth.py::test_login\n1 passed in 0.2s", "exit_code": 0}
+    ],
+    "Edit": {
+      "_default": "File edited successfully"
+    },
+    "Glob": {
+      "_default": "[\"auth.py\", \"test_auth.py\"]"
+    }
+  },
+  "assertions": {
+    "max_steps": 10,
+    "must_use_tools": ["Read", "Edit"],
+    "must_not_use_tools": ["WebSearch", "WebFetch"],
+    "no_loops": true,
+    "max_error_rate": 0.3,
+    "goal_achieved": "The agent should edit auth.py to return the user object instead of None when authentication succeeds"
+  },
+  "max_turns": 15,
+  "max_budget_usd": 0.10
+}

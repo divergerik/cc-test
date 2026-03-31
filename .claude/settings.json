@@ -1,0 +1,44 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "Read(//Users/erikmuniain/Projects/**)",
+      "WebFetch(domain:mikhail.io)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:anthropic.skilljar.com)",
+      "Read(//Users/erikmuniain/.claude/**)",
+      "Read(//Users/erikmuniain/.claude/plugins/**)",
+      "Bash(find /Users/erikmuniain/.claude -name *.mcp.json -o -name .mcp.json)",
+      "Bash(find /Users/erikmuniain/.claude/plugins/marketplaces/anthropics-claude-plugins-official -name *.md -path */skill-creator/* -o -name *.md -path */skill-eval*)",
+      "Bash(chmod +x /Users/erikmuniain/Projects/llm-testing/tools/discover_plugins.py)",
+      "Bash(python3 /Users/erikmuniain/Projects/llm-testing/tools/discover_plugins.py --path /Users/erikmuniain/Projects/llm-testing)",
+      "Bash(chmod +x /Users/erikmuniain/Projects/llm-testing/tools/validate_frontmatter.py)",
+      "Bash(chmod +x /Users/erikmuniain/Projects/llm-testing/tools/validate_hook_schema.sh /Users/erikmuniain/Projects/llm-testing/tools/validate_agent.sh /Users/erikmuniain/Projects/llm-testing/tools/run_hook_test.sh)",
+      "Bash(python3 tools/validate_frontmatter.py --type skill skills/skill-validator/SKILL.md)",
+      "Bash(python3 tools/validate_frontmatter.py --type skill skills/hook-validator/SKILL.md)",
+      "Bash(python3 tools/discover_plugins.py --path .)",
+      "Bash(python3 tools/validate_frontmatter.py --type command commands/test-skill.md)",
+      "Bash(python3 -c \"import claude_agent_sdk\")",
+      "Bash(pip3 list:*)",
+      "Bash(python3 -c \"import anthropic; print\\(dir\\(anthropic\\)\\)\")",
+      "Bash(python3 -c \"from anthropic import Claude\")",
+      "Bash(pip3 show:*)",
+      "Bash(python3 -c \"import claude_code_sdk; print\\(claude_code_sdk.__version__\\)\")",
+      "Bash(python3 -m json.tool)",
+      "Bash(python3 /Users/erikmuniain/Projects/llm-testing/tools/trajectory_analyzer.py --trace /tmp/loop_trace.jsonl --assertions /tmp/loop_assertions.json)",
+      "Bash(chmod +x /Users/erikmuniain/Projects/llm-testing/tools/trajectory_runner.py /Users/erikmuniain/Projects/llm-testing/tools/trajectory_analyzer.py)",
+      "Bash(python3 /Users/erikmuniain/Projects/llm-testing/tools/trajectory_runner.py --eval /Users/erikmuniain/Projects/llm-testing/fixtures/trajectory-evals/fix-auth-bug.json --mock-only --output /tmp/mock_trace.jsonl)",
+      "Bash(python3 /Users/erikmuniain/Projects/llm-testing/tools/trajectory_analyzer.py --trace /tmp/mock_trace.jsonl --assertions /Users/erikmuniain/Projects/llm-testing/fixtures/trajectory-evals/fix-auth-bug.json)",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(json.dumps\\({k: len\\(v\\) if isinstance\\(v,list\\) else v for k,v in d[''''inventory''''].items\\(\\)}, indent=2\\)\\)\")",
+      "Bash(python3 tools/validate_frontmatter.py --type skill skills/trajectory-tester/SKILL.md)",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(f''''Skill trajectory-tester: {d[\"\"passed\"\"]} passed, {d[\"\"failed\"\"]} failed''''\\)\")",
+      "Bash(python3 tools/validate_frontmatter.py --type agent agents/trajectory-grader.md)",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(f''''Agent trajectory-grader: {d[\"\"passed\"\"]} passed, {d[\"\"failed\"\"]} failed''''\\)\")",
+      "Bash(python3 tools/validate_frontmatter.py --type command commands/test-trajectory.md)",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(f''''Command test-trajectory: {d[\"\"passed\"\"]} passed, {d[\"\"failed\"\"]} failed''''\\)\")"
+    ],
+    "additionalDirectories": [
+      "/tmp"
+    ]
+  }
+}

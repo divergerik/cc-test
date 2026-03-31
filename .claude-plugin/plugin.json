@@ -1,0 +1,8 @@
+{
+  "name": "cc-test",
+  "version": "0.1.0",
+  "description": "A meta-testing plugin for Claude Code. Validates and evaluates other plugins' skills, agents, hooks, and tools/MCP servers.",
+  "author": "erikmuniain",
+  "homepage": "",
+  "license": "MIT"
+}
