@@ -22,6 +22,7 @@ Parse `$ARGUMENTS` to determine what to test:
   python3 "${CLAUDE_PLUGIN_ROOT}/tools/discover_plugins.py" --path "<plugin-path>"
   ```
   Look for `trajectory_evals` in the inventory.
+- If `--sandbox` is in the arguments: run with real tools in isolated temp directory + deterministic verification
 - If `--mock-only` is in the arguments: pass it to the runner (no SDK required)
 - If `--quick` is in the arguments: skip LLM grading (deterministic only)
 - If no arguments: look for `fixtures/trajectory-evals/*.json` in the current working directory
@@ -30,7 +31,7 @@ Parse `$ARGUMENTS` to determine what to test:
 
 Follow the trajectory-tester skill steps:
 
-1. **Run**: Execute `trajectory_runner.py --eval <file> [--mock-only]` for each eval
-2. **Analyze**: Execute `trajectory_analyzer.py --trace <trace> --assertions <eval>` for each trace
+1. **Run**: Execute `trajectory_runner.py --eval <file> [--mock-only|--sandbox]` for each eval
+2. **Analyze**: Execute `trajectory_analyzer.py --trace <trace> --assertions <eval>` for each trace (includes verification results from sandbox mode)
 3. **Grade** (unless `--quick`): Delegate to the `trajectory-grader` agent
 4. **Report**: Output the structured report combining all results

@@ -35,7 +35,19 @@
       "Bash(python3 tools/validate_frontmatter.py --type agent agents/trajectory-grader.md)",
       "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(f''''Agent trajectory-grader: {d[\"\"passed\"\"]} passed, {d[\"\"failed\"\"]} failed''''\\)\")",
       "Bash(python3 tools/validate_frontmatter.py --type command commands/test-trajectory.md)",
-      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(f''''Command test-trajectory: {d[\"\"passed\"\"]} passed, {d[\"\"failed\"\"]} failed''''\\)\")"
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(f''''Command test-trajectory: {d[\"\"passed\"\"]} passed, {d[\"\"failed\"\"]} failed''''\\)\")",
+      "Bash(pip3 install:*)",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(f''''{d[\"\"passed\"\"]} passed, {d[\"\"failed\"\"]} failed''''\\)\")",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(f''''{d[\"\"passed\"\"]} passed, {d[\"\"failed\"\"]} failed, fm={list\\(d.get\\(\"\"frontmatter\"\",{}\\).keys\\(\\)\\)}''''\\)\")",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(json.dumps\\(d[''''frontmatter''''], indent=2\\)\\); print\\(f''''Result: {d[\"\"passed\"\"]}p {d[\"\"failed\"\"]}f''''\\)\")",
+      "Bash(python3 tools/validate_frontmatter.py --type skill /tmp/test_multiline.md)",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(f''''{d[\"\"passed\"\"]}p {d[\"\"failed\"\"]}f {d[\"\"warnings\"\"]}w''''\\)\")",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); [print\\(f''''  {c[\"\"check\"\"]}: {c[\"\"status\"\"]} {c.get\\(\"\"detail\"\",\"\"\"\"\\)}''''\\) for c in d[''''checks'''']]\")",
+      "Bash(python3 tools/trajectory_runner.py --eval fixtures/trajectory-evals/fix-auth-bug.json --mock-only --output /tmp/regression_mock.jsonl)",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(f''''  status: {d[\"\"status\"\"]}, calls: {d[\"\"tool_calls\"\"]}''''\\)\")",
+      "Bash(python3 tools/trajectory_analyzer.py --trace /tmp/regression_mock.jsonl --assertions fixtures/trajectory-evals/fix-auth-bug.json)",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(f''''  {d[\"\"passed\"\"]}p {d[\"\"failed\"\"]}f''''\\)\")",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); checks={c[''''check'''']:c[''''status''''] for c in d[''''assertions'''']}; print\\(f''''  verification in assertions: {\"\"verification\"\" in checks} -> {checks.get\\(\"\"verification\"\",\"\"missing\"\"\\)}''''\\)\")"
     ],
     "additionalDirectories": [
       "/tmp"

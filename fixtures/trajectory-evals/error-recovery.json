@@ -27,6 +27,9 @@
     "max_error_rate": 0.5,
     "goal_achieved": "The agent should find and read the config file despite initial permission errors, and summarize the database (postgres on localhost:5432) and cache (redis on cache.internal:6379) settings"
   },
+  "verification": {
+    "expected_files_changed": []
+  },
   "max_turns": 15,
   "max_budget_usd": 0.10
 }

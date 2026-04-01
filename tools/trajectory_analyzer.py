@@ -239,6 +239,32 @@ def run_assertions(metrics: dict, assertions: dict, tool_uses: list[dict]) -> li
     return checks
 
 
+def inject_verification_checks(entries: list[dict], checks: list[dict]):
+    """If the trace contains a verification entry (from sandbox mode), add its checks."""
+    verification = next((e for e in entries if e.get("type") == "verification"), None)
+    if not verification:
+        return
+
+    v_status = verification.get("status")
+    v_passed = verification.get("passed", 0)
+    v_failed = verification.get("failed", 0)
+
+    if v_status == "passed":
+        checks.append({"check": "verification", "status": "passed",
+                       "detail": f"All {v_passed} verification checks passed"})
+    elif v_status == "failed":
+        checks.append({"check": "verification", "status": "failed",
+                       "detail": f"{v_failed} verification checks failed"})
+        # Include individual failed checks for detail
+        for vc in verification.get("checks", []):
+            if vc.get("status") == "failed":
+                checks.append({"check": f"verification_{vc['check']}", "status": "failed",
+                               "detail": vc.get("detail", "")})
+    elif v_status == "skipped":
+        checks.append({"check": "verification", "status": "info",
+                       "detail": "No verification block in eval"})
+
+
 def main():
     parser = argparse.ArgumentParser(description="Analyze agent trajectory traces")
     parser.add_argument("--trace", required=True, help="Path to JSONL trace file")
@@ -267,6 +293,7 @@ def main():
     if args.assertions:
         assertions = load_assertions(args.assertions)
         checks = run_assertions(metrics, assertions, tool_uses)
+        inject_verification_checks(entries, checks)
         passed = sum(1 for c in checks if c["status"] == "passed")
         failed = sum(1 for c in checks if c["status"] == "failed")
         warnings = sum(1 for c in checks if c["status"] == "warning")

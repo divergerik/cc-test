@@ -30,16 +30,24 @@ Or use Glob to find `**/trajectory-evals/*.json`.
 
 ### Step 2: Run each trajectory eval
 
-For each eval JSON file, execute the trajectory runner:
+For each eval JSON file, execute the trajectory runner. Three modes are available:
 
+**Mock mode** (default) — agent runs with mocked tool responses, fast and cheap:
 ```bash
 python3 "${CLAUDE_PLUGIN_ROOT}/tools/trajectory_runner.py" --eval "<eval.json>" --output "<traces_dir>/<name>.jsonl"
 ```
 
-If the Claude Code SDK is not installed, use `--mock-only` flag to test the pipeline:
+**Sandbox mode** (`--sandbox`) — agent runs with real tools in an isolated temp directory, then runs deterministic verification:
+```bash
+python3 "${CLAUDE_PLUGIN_ROOT}/tools/trajectory_runner.py" --eval "<eval.json>" --sandbox --output "<traces_dir>/<name>.jsonl"
+```
+
+**Mock-only mode** (`--mock-only`) — no SDK, no API cost, just tests the pipeline:
 ```bash
 python3 "${CLAUDE_PLUGIN_ROOT}/tools/trajectory_runner.py" --eval "<eval.json>" --mock-only --output "<traces_dir>/<name>.jsonl"
 ```
+
+Choose the mode based on the user's request or the presence of `--sandbox`/`--mock-only`/`--quick` flags in $ARGUMENTS.
 
 Record the output JSON (test_name, trace_file, status, tool_calls, duration).
 

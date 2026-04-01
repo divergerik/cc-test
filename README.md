@@ -100,13 +100,39 @@ This will:
 3. Analyze the trace for loops, step count, tool selection, error rate
 4. Grade reasoning quality with LLM-as-a-Judge (5 dimensions, 1-5 each)
 
-Add `--mock-only` to test the full pipeline without calling the Claude API:
+### Testing pyramid: three execution modes
+
+Trajectory tests support three modes, forming a testing pyramid:
+
+```
+        /  --sandbox  \        Slow, real tools, deterministic verification
+       /    (real)     \       Highest confidence, highest cost
+      /________________\
+     /   default (mock) \      SDK + mock tools, tests agent reasoning
+    /____________________\     Medium cost, high reproducibility
+   /   --mock-only        \    No SDK, no API, tests pipeline only
+  /________________________\   Zero cost, fast, for CI smoke tests
+```
+
+**Mock mode** (default) — agent with mocked tool responses, fast and cheap:
+
+```
+/cc-test:test-trajectory ./fixtures/trajectory-evals/fix-auth-bug.json
+```
+
+**Sandbox mode** (`--sandbox`) — real tools in an isolated temp directory. After the agent runs, deterministic verification checks whether the goal was actually achieved (files changed, content correct, tests pass):
+
+```
+/cc-test:test-trajectory ./fixtures/trajectory-evals/fix-auth-bug.json --sandbox
+```
+
+**Mock-only mode** (`--mock-only`) — no SDK, no API calls, tests the pipeline:
 
 ```
 /cc-test:test-trajectory ./fixtures/trajectory-evals/fix-auth-bug.json --mock-only
 ```
 
-Add `--quick` to skip the LLM grading and run only deterministic assertions:
+Add `--quick` to any mode to skip LLM grading (deterministic assertions only):
 
 ```
 /cc-test:test-trajectory ./fixtures/trajectory-evals/fix-auth-bug.json --quick
@@ -190,6 +216,9 @@ python3 tools/trajectory_analyzer.py --trace /path/to/trace.jsonl --assertions /
 # Run trajectory test in mock-only mode (no API)
 python3 tools/trajectory_runner.py --eval /path/to/eval.json --mock-only
 
+# Run trajectory test in sandbox mode (real tools + verification)
+python3 tools/trajectory_runner.py --eval /path/to/eval.json --sandbox
+
 # Discover what components a plugin has
 python3 tools/discover_plugins.py --path /path/to/plugin
 ```
@@ -204,13 +233,18 @@ python3 tools/discover_plugins.py --path /path/to/plugin
 - **Trajectory testing with the SDK**: each `test-trajectory` run calls the Claude API to execute the agent. Budget defaults to **$0.10 per test**. A plugin with 5 evals could cost ~$0.50 per full run. Use `--mock-only` or `--quick` to limit costs during development.
 - **LLM grading**: the trajectory-grader agent makes additional API calls. Skip with `--quick`.
 
-### The trajectory runner is not a real sandbox
+### Sandbox mode vs. mock mode
 
-The `trajectory_runner.py` uses mock tool responses, so the agent never touches your real filesystem. However:
+The trajectory runner has two main execution modes:
 
-- It is **not** a container or security sandbox. The runner relies on the Claude Code SDK, which could theoretically make tool calls outside the mock scope if the mock configuration is incomplete.
-- Always review your eval's `mock_tools` section to ensure every tool the agent might call has a mock entry. Tools without mock entries return an error, but the agent may attempt workarounds.
-- For production-grade isolation, run trajectory tests inside a container or CI environment with `permission_mode: "bypassPermissions"`.
+**Mock mode** (default) uses `MockToolRouter` to return controlled responses. The agent never touches your real filesystem. However, mocks can be fragile — substring matching on `input_match` may miss if the agent phrases a command differently than expected.
+
+**Sandbox mode** (`--sandbox`) creates a real temp directory, populates it with files from the eval, and lets the agent run with real tools. After execution, deterministic verification checks whether files were correctly modified. The sandbox is cleaned up automatically.
+
+Neither mode is a container or security sandbox:
+- In mock mode, tools without mock entries return errors, but the agent may attempt workarounds via the SDK.
+- In sandbox mode, the agent has real tool access. The temp directory provides filesystem isolation, but network access and system commands are not restricted.
+- For production-grade isolation, run trajectory tests inside a Docker container or CI environment.
 
 ### Non-determinism in trajectory tests
 
@@ -299,10 +333,27 @@ To test a specific agent behavior scenario:
     "no_loops": true,
     "goal_achieved": "The agent should split process_order into two functions: validate_order and process_order, where process_order calls validate_order"
   },
+  "verification": {
+    "expected_files_changed": ["orders.py"],
+    "expected_file_contains": {
+      "orders.py": "def validate_order"
+    }
+  },
   "max_turns": 15,
   "max_budget_usd": 0.10
 }
 ```
+
+The `verification` block is used in sandbox mode (`--sandbox`) to deterministically check whether the agent achieved its goal. It supports four check types:
+
+| Check | Format | What it verifies |
+|-------|--------|-----------------|
+| `command` + `expected_exit_code` | `"command": "pytest", "expected_exit_code": 0` | Run a shell command in the sandbox and check exit code |
+| `expected_stdout_contains` | `["passed"]` | Substrings that must appear in the command's stdout |
+| `expected_files_changed` | `["auth.py"]` | Files that must exist after the agent runs |
+| `expected_file_contains` | `{"auth.py": "return user"}` | Strings that must appear in file contents after execution |
+
+In mock mode (no `--sandbox`), the verification block is ignored and goal achievement falls back to LLM-as-a-Judge evaluation.
 
 The mock tools support three patterns:
 

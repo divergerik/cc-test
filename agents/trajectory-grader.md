@@ -65,6 +65,12 @@ Score each dimension from 1 (poor) to 5 (excellent):
 - **1**: Read extensively without acting, or acted without reading
 
 ### 5. Goal Achievement
+
+**If verification results are available** (sandbox mode), use them as ground truth:
+- Verification passed → score **5**
+- Verification failed → score **2**
+
+**If no verification data is present** (mock mode), use trace-based judgment:
 - **5**: Fully achieved the goal as described in the eval
 - **4**: Goal mostly achieved with minor gaps
 - **3**: Partial achievement — core objective met but details missed

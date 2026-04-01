@@ -17,6 +17,8 @@ import re
 import sys
 from pathlib import Path
 
+import yaml
+
 
 VALID_TOOLS = {
     "Read", "Edit", "Write", "Glob", "Grep", "Bash", "Agent", "Skill",
@@ -44,7 +46,7 @@ def parse_frontmatter(text: str) -> tuple[dict | None, str, list[dict]]:
     """Parse YAML frontmatter from markdown text.
 
     Returns (frontmatter_dict, body, errors).
-    Uses a simple parser to avoid requiring PyYAML.
+    Uses PyYAML for full YAML support (multi-line, lists, nested objects).
     """
     errors = []
     lines = text.split("\n")
@@ -64,30 +66,24 @@ def parse_frontmatter(text: str) -> tuple[dict | None, str, list[dict]]:
         errors.append({"check": "frontmatter_syntax", "status": "failed", "detail": "No closing '---' found"})
         return None, text, errors
 
-    # Simple YAML parser (handles key: value, key: "value", arrays)
-    fm = {}
-    fm_lines = lines[1:end_idx]
-    for line in fm_lines:
-        line = line.strip()
-        if not line or line.startswith("#"):
-            continue
-        match = re.match(r'^([a-zA-Z_-]+)\s*:\s*(.*)$', line)
-        if match:
-            key = match.group(1)
-            value = match.group(2).strip()
-            # Remove quotes
-            if (value.startswith('"') and value.endswith('"')) or \
-               (value.startswith("'") and value.endswith("'")):
-                value = value[1:-1]
-            # Handle booleans
-            if value.lower() in ("true", "yes"):
-                value = True
-            elif value.lower() in ("false", "no"):
-                value = False
-            # Handle integers
-            elif value.isdigit():
-                value = int(value)
-            fm[key] = value
+    raw_yaml = "\n".join(lines[1:end_idx])
+
+    # Strip <example>...</example> blocks — Claude Code convention, not valid YAML
+    cleaned_yaml = re.sub(r'<example>.*?</example>', '', raw_yaml, flags=re.DOTALL)
+
+    try:
+        fm = yaml.safe_load(cleaned_yaml)
+        if not isinstance(fm, dict):
+            errors.append({"check": "frontmatter_syntax", "status": "failed",
+                            "detail": "Frontmatter is not a YAML mapping"})
+            return None, "\n".join(lines[end_idx + 1:]).strip(), errors
+    except yaml.YAMLError as e:
+        errors.append({"check": "frontmatter_syntax", "status": "failed",
+                        "detail": f"YAML parse error: {e}"})
+        return None, text, errors
+
+    # Detect <example> blocks for metadata
+    fm["_has_examples"] = "<example>" in raw_yaml
 
     body = "\n".join(lines[end_idx + 1:]).strip()
     return fm, body, errors
@@ -138,10 +134,13 @@ def validate_skill(fm: dict, body: str, file_path: Path) -> list[dict]:
         else:
             checks.append({"check": "line_count", "status": "passed"})
 
-    # Allowed tools
+    # Allowed tools (supports both "Read, Bash" string and ["Read", "Bash"] list)
     allowed = fm.get("allowed-tools", "")
     if allowed:
-        tools = [t.strip() for t in str(allowed).split(",")]
+        if isinstance(allowed, list):
+            tools = [str(t).strip() for t in allowed]
+        else:
+            tools = [t.strip() for t in str(allowed).split(",")]
         invalid = [t for t in tools if t and t not in VALID_TOOLS]
         if invalid:
             checks.append({"check": "allowed_tools_valid", "status": "warning",
@@ -165,8 +164,8 @@ def validate_skill(fm: dict, body: str, file_path: Path) -> list[dict]:
         checks.append({"check": "evals_present", "status": "info",
                         "detail": "No evals/evals.json found (recommended for testing)"})
 
-    # Unknown fields
-    known = SKILL_REQUIRED_FIELDS | SKILL_OPTIONAL_FIELDS
+    # Unknown fields (exclude internal _has_examples key)
+    known = SKILL_REQUIRED_FIELDS | SKILL_OPTIONAL_FIELDS | {"_has_examples"}
     unknown = [k for k in fm if k not in known]
     if unknown:
         checks.append({"check": "unknown_fields", "status": "warning",
@@ -196,10 +195,13 @@ def validate_agent(fm: dict, body: str, file_path: Path) -> list[dict]:
     elif model:
         checks.append({"check": "model_valid", "status": "passed"})
 
-    # Tools
+    # Tools (supports both "Read, Bash" string and ["Read", "Bash"] list)
     tools = fm.get("tools", "")
     if tools:
-        tool_list = [t.strip() for t in str(tools).split(",")]
+        if isinstance(tools, list):
+            tool_list = [str(t).strip() for t in tools]
+        else:
+            tool_list = [t.strip() for t in str(tools).split(",")]
         invalid = [t for t in tool_list if t and t.split("(")[0] not in VALID_TOOLS]
         if invalid:
             checks.append({"check": "tools_valid", "status": "warning",
@@ -215,15 +217,14 @@ def validate_agent(fm: dict, body: str, file_path: Path) -> list[dict]:
         checks.append({"check": "system_prompt_present", "status": "passed"})
 
     # Example blocks in description
-    full_text = (file_path.read_text() if file_path.exists() else "")
-    if "<example>" in full_text:
+    if fm.get("_has_examples"):
         checks.append({"check": "has_examples", "status": "passed"})
     else:
         checks.append({"check": "has_examples", "status": "info",
                         "detail": "No <example> blocks found (recommended for agent descriptions)"})
 
-    # Unknown fields
-    known = AGENT_REQUIRED_FIELDS | AGENT_OPTIONAL_FIELDS
+    # Unknown fields (exclude internal _has_examples key)
+    known = AGENT_REQUIRED_FIELDS | AGENT_OPTIONAL_FIELDS | {"_has_examples"}
     unknown = [k for k in fm if k not in known]
     if unknown:
         checks.append({"check": "unknown_fields", "status": "warning",

@@ -26,6 +26,12 @@
     "max_error_rate": 0.3,
     "goal_achieved": "The agent should edit auth.py to return the user object instead of None when authentication succeeds"
   },
+  "verification": {
+    "expected_files_changed": ["auth.py"],
+    "expected_file_contains": {
+      "auth.py": "return user"
+    }
+  },
   "max_turns": 15,
   "max_budget_usd": 0.10
 }

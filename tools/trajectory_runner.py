@@ -18,7 +18,10 @@ import argparse
 import asyncio
 import json
 import re
+import shutil
+import subprocess
 import sys
+import tempfile
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -305,6 +308,149 @@ async def run_trajectory_mock_only(eval_data: dict, output_path: str, max_turns:
     }
 
 
+def run_verification(eval_data: dict, sandbox_dir: Path) -> dict:
+    """Run deterministic verification after agent execution in sandbox."""
+    verification = eval_data.get("verification")
+    if not verification:
+        return {"status": "skipped", "detail": "No verification block in eval"}
+
+    checks = []
+
+    # Check: command exit code + stdout
+    if "command" in verification:
+        try:
+            result = subprocess.run(
+                verification["command"], shell=True, cwd=str(sandbox_dir),
+                capture_output=True, text=True, timeout=30,
+            )
+        except subprocess.TimeoutExpired:
+            checks.append({"check": "command_run", "status": "failed",
+                           "detail": "Verification command timed out (30s)"})
+            result = None
+
+        if result is not None:
+            expected_code = verification.get("expected_exit_code", 0)
+            if result.returncode == expected_code:
+                checks.append({"check": "exit_code", "status": "passed",
+                               "detail": f"Exit code {result.returncode} == {expected_code}"})
+            else:
+                checks.append({"check": "exit_code", "status": "failed",
+                               "detail": f"Exit code {result.returncode} != {expected_code}"})
+
+            for needle in verification.get("expected_stdout_contains", []):
+                if needle in result.stdout:
+                    checks.append({"check": f"stdout_contains", "status": "passed",
+                                   "detail": f"Found '{needle}' in stdout"})
+                else:
+                    checks.append({"check": f"stdout_contains", "status": "failed",
+                                   "detail": f"'{needle}' not found in stdout"})
+
+    # Check: files changed (exist after execution)
+    for fname in verification.get("expected_files_changed", []):
+        fpath = sandbox_dir / fname
+        if fpath.exists():
+            checks.append({"check": f"file_exists_{fname}", "status": "passed"})
+        else:
+            checks.append({"check": f"file_exists_{fname}", "status": "failed",
+                           "detail": f"{fname} does not exist after execution"})
+
+    # Check: file contains string
+    for fname, needle in verification.get("expected_file_contains", {}).items():
+        fpath = sandbox_dir / fname
+        if fpath.exists() and needle in fpath.read_text():
+            checks.append({"check": f"file_contains_{fname}", "status": "passed",
+                           "detail": f"Found '{needle}' in {fname}"})
+        else:
+            detail = f"{fname} not found" if not fpath.exists() else f"'{needle}' not in {fname}"
+            checks.append({"check": f"file_contains_{fname}", "status": "failed",
+                           "detail": detail})
+
+    passed = sum(1 for c in checks if c["status"] == "passed")
+    failed = sum(1 for c in checks if c["status"] == "failed")
+    return {"status": "passed" if failed == 0 else "failed",
+            "checks": checks, "passed": passed, "failed": failed}
+
+
+def _record_messages(message, recorder):
+    """Shared logic: extract text and tool calls from SDK messages into the recorder."""
+    if hasattr(message, "content"):
+        for block in message.content:
+            if hasattr(block, "type"):
+                if block.type == "text":
+                    recorder.record("assistant_text", content=block.text[:500])
+                elif block.type == "tool_use":
+                    recorder.record("tool_use",
+                                    tool=block.name,
+                                    input=block.input if hasattr(block, "input") else {},
+                                    tool_use_id=block.id)
+    elif hasattr(message, "result"):
+        recorder.record("result",
+                        subtype=getattr(message, "subtype", "unknown"),
+                        cost_usd=getattr(message, "cost_usd", None),
+                        usage=getattr(message, "usage", {}))
+
+
+async def run_trajectory_sandbox(eval_data: dict, output_path: str, max_turns: int,
+                                 max_budget: float, timeout: int) -> dict:
+    """Run agent with real tools in an isolated temp directory."""
+    import claude_code_sdk as sdk
+
+    sandbox_dir = Path(tempfile.mkdtemp(prefix="cc_test_sandbox_"))
+    recorder = TraceRecorder(output_path)
+    start_time = time.time()
+
+    try:
+        # 1. Populate sandbox with files from sandbox_files or mock_tools.Read
+        files = eval_data.get("sandbox_files") or eval_data.get("mock_tools", {}).get("Read", {})
+        for filename, content in files.items():
+            if filename.startswith("_") or isinstance(content, dict):
+                continue
+            filepath = sandbox_dir / filename
+            filepath.parent.mkdir(parents=True, exist_ok=True)
+            filepath.write_text(str(content))
+
+        recorder.record("sandbox_setup",
+                        sandbox_dir=str(sandbox_dir),
+                        files_created=sorted(str(p.relative_to(sandbox_dir))
+                                             for p in sandbox_dir.rglob("*") if p.is_file()))
+
+        # 2. Run agent with real tools, cwd = sandbox
+        options = sdk.ClaudeCodeOptions(
+            max_turns=max_turns,
+            cwd=str(sandbox_dir),
+        )
+
+        async for message in sdk.query(prompt=eval_data["prompt"], options=options):
+            _record_messages(message, recorder)
+
+    except asyncio.TimeoutError:
+        recorder.record("result", subtype="timeout", cost_usd=None, usage={})
+    except Exception as e:
+        recorder.record("result", subtype="error", error=str(e), cost_usd=None, usage={})
+
+    # 3. Run verification
+    verification_result = run_verification(eval_data, sandbox_dir)
+    recorder.record("verification", **verification_result)
+
+    duration = time.time() - start_time
+    recorder.close()
+
+    # 4. Cleanup
+    shutil.rmtree(sandbox_dir, ignore_errors=True)
+
+    return {
+        "test_name": eval_data["test_name"],
+        "eval_file": str(Path(output_path).resolve()),
+        "trace_file": str(Path(output_path).resolve()),
+        "status": "completed",
+        "mode": "sandbox",
+        "total_entries": recorder.seq,
+        "tool_calls": sum(1 for e in recorder.entries if e["type"] == "tool_use"),
+        "duration_seconds": round(duration, 2),
+        "verification": verification_result,
+    }
+
+
 def main():
     parser = argparse.ArgumentParser(description="Run agent trajectory test with mock tools")
     parser.add_argument("--eval", required=True, help="Path to trajectory eval JSON")
@@ -314,6 +460,8 @@ def main():
     parser.add_argument("--timeout", type=int, default=120, help="Timeout in seconds (default: 120)")
     parser.add_argument("--mock-only", action="store_true",
                         help="Run in mock-only mode without the Claude SDK (for pipeline testing)")
+    parser.add_argument("--sandbox", action="store_true",
+                        help="Run with real tools in an isolated temp directory (requires SDK)")
     args = parser.parse_args()
 
     eval_path = Path(args.eval).resolve()
@@ -344,6 +492,21 @@ def main():
 
     if args.mock_only:
         result = asyncio.run(run_trajectory_mock_only(eval_data, output_path, max_turns))
+    elif args.sandbox:
+        if not check_sdk_available():
+            json.dump({
+                "error": "claude-code-sdk not installed. Run: pip install claude-code-sdk",
+                "hint": "Use --mock-only flag to test the pipeline without the SDK"
+            }, sys.stdout, indent=2)
+            print()
+            sys.exit(1)
+
+        result = asyncio.run(
+            asyncio.wait_for(
+                run_trajectory_sandbox(eval_data, output_path, max_turns, max_budget, args.timeout),
+                timeout=args.timeout,
+            )
+        )
     else:
         if not check_sdk_available():
             json.dump({
